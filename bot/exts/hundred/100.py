@@ -3,7 +3,6 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-import email
 from discord.ext import commands, bridge
 from discord.ext.pages import Page, Paginator
 import discord
@@ -15,8 +14,10 @@ class Hundred(commands.Cog):
     def __init__(self, bot: Bot) -> None:
         self.bot = bot
 
-    @commands.group(name="100", description="100 days of code challenge.")
-    async def _100(self, ctx: commands.Context):
+    @staticmethod
+    def get_pages() -> list:
+        """Return main menu page for 100DaysOfCode command."""
+
         pages = []
 
         page1 = discord.Embed(
@@ -89,6 +90,15 @@ class Hundred(commands.Cog):
         pages.append(Page(embeds=[page3]))
         pages.append(Page(embeds=[page4]))
         pages.append(Page(embeds=[page5]))
+        return pages
+
+    @commands.group(
+        name="100",
+        description="100 days of code challenge.",
+        invoke_without_command=True,
+    )
+    async def _100(self, ctx: commands.Context):
+        pages = self.get_pages()
         paginator = Paginator(pages=pages, timeout=100)
         await paginator.send(ctx)
 
