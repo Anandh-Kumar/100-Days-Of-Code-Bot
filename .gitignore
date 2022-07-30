@@ -1,0 +1,6 @@
+*.code-workspace
+.venv
+.env
+__pycache__
+.vscode
+testing/
