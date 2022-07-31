@@ -3,11 +3,12 @@
 # This software is released under the MIT License.
 # https://opensource.org/licenses/MIT
 
-from discord.ext import commands, bridge
+from discord.ext import commands
 from discord.ext.pages import Page, Paginator
 import discord
 import typing
 from bot.bot import Bot
+from bot.utils.database import Database
 
 
 class Hundred(commands.Cog):
@@ -92,6 +93,61 @@ class Hundred(commands.Cog):
         pages.append(Page(embeds=[page5]))
         return pages
 
+    async def _process_commit(self, ctx, commit_message: str):
+        user_id = ctx.author.id
+        guild_id = ctx.guild.id
+
+        last_update = await self.bot.mongo.get_user_day_until_last_commit(user_id)
+        if last_update != None and last_update <= -2:
+            await self.bot.mongo.reset_user_streak(user_id)
+
+        if last_update == None or last_update <= -1:
+            message = None
+            message_id = None
+            channel = None
+            channel_info = await self.bot.mongo.get_guild_logs_document(
+                guild_id, "100DaysOfCode"
+            )
+            channel_id = channel_info["100DaysOfCode"]
+            channel = self.bot.get_channel(channel_id)
+            embed = discord.Embed(
+                title="100 Days of Code",
+                description=commit_message,
+                color=discord.Color.orange(),
+            )
+            embed.set_author(name=ctx.author, icon_url=ctx.author.display_avatar)
+
+            # Gets message id
+            if channel:
+                message = await channel.send(embed=embed)
+                message_id = message.id
+
+            # Commits
+            if last_update == None:
+                commit = await self.bot.mongo.create_user_document(
+                    user_id, commit_message, message_id
+                )
+            else:
+                commit = await self.bot.mongo.add_new_commit(
+                    user_id, commit_message, message_id
+                )
+
+            # Edit message
+            round = commit["current_day_streak"] // 100
+
+            day_streak = commit["current_day_streak"] % 100
+            embed.add_field(name="Round", value=f"`{round}`")
+            embed.add_field(name="Day", value=f"`{day_streak}`")
+            embed.add_field(name="Message ID", value=f"`{message_id}`")
+            embed.set_footer(text=f"Time: {commit['date']}")
+            if message:
+                await message.edit(embed=embed)
+            return embed
+        embed = discord.Embed(
+            description="Looks like you have already commited today!",
+        )
+        return embed
+
     @commands.group(
         name="100",
         description="100 days of code challenge.",
@@ -101,6 +157,12 @@ class Hundred(commands.Cog):
         pages = self.get_pages()
         paginator = Paginator(pages=pages, timeout=100)
         await paginator.send(ctx)
+
+    @_100.command(name="commit", description="Commit your progress in #100DaysOfCode.")
+    async def _commit_command(self, ctx: commands.Context, commit_message):
+        await ctx.trigger_typing()
+        embed = await self._process_commit(ctx, commit_message)
+        await ctx.send(embed=embed, delete_after=15)
 
 
 def setup(bot: Bot):
